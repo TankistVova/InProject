@@ -1,213 +1,126 @@
-// app/medicine-list.tsx
 import React, { useState, useCallback } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, Alert, RefreshControl } from 'react-native';
-import { Link, useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AntDesign } from '@expo/vector-icons'; // Установите пакет @expo/vector-icons
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity
+} from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 
-export interface Medicine {
-  id: string;
-  name: string;
-  quantity: number;
-  dosage: string;
-  expirationDate: string;
-  category: string;
-  isFavorite: boolean;
-  image: string | null;
-}
+// Локальные изображения
+const bannerList = [
+  {
+    title: 'Аптека "Здоровье+"',
+    subtitle: 'Скидки в аптеках Таганрога',
+    image: require('../styles/images/Reklama1.png')
+  },
+  {
+    title: 'Аптека "Будь здоров"',
+    subtitle: 'Акции каждую неделю',
+    image: require('../styles/images/Reklama2.png')
+  },
+  {
+    title: 'Аптека "Фарма+"',
+    subtitle: 'Доставка по городу',
+    image: require('../styles/images/Reklama3.png')
+  }
+];
 
-const MedicineListScreen: React.FC = () => {
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+export default function MenuScreen() {
+  const router = useRouter();
+  const [banner, setBanner] = useState(bannerList[0]);
 
-  const loadMedicines = async () => {
-    try {
-      const storedMedicines = await AsyncStorage.getItem('medicines');
-      if (storedMedicines) {
-        setMedicines(JSON.parse(storedMedicines));
-      }
-    } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось загрузить список лекарств');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
+  // 🔁 Обновляем баннер при каждом заходе на экран
   useFocusEffect(
     useCallback(() => {
-      loadMedicines();
+      const random = bannerList[Math.floor(Math.random() * bannerList.length)];
+      setBanner(random);
     }, [])
-  );
-
-  const deleteMedicine = async (id: string) => {
-    Alert.alert(
-      'Удаление лекарства',
-      'Вы уверены, что хотите удалить это лекарство?',
-      [
-        {
-          text: 'Отмена',
-          style: 'cancel'
-        },
-        {
-          text: 'Удалить',
-          onPress: async () => {
-            try {
-              const updated = medicines.filter(medicine => medicine.id !== id);
-              await AsyncStorage.setItem('medicines', JSON.stringify(updated));
-              setMedicines(updated);
-            } catch (error) {
-              Alert.alert('Ошибка', 'Не удалось удалить лекарство');
-            }
-          },
-          style: 'destructive'
-        }
-      ]
-    );
-  };
-
-  const toggleFavorite = async (id: string) => {
-    const updated = medicines.map(medicine => 
-      medicine.id === id ? { ...medicine, isFavorite: !medicine.isFavorite } : medicine
-    );
-    try {
-      await AsyncStorage.setItem('medicines', JSON.stringify(updated));
-      setMedicines(updated);
-    } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось обновить избранное');
-    }
-  };
-
-  const renderItem = ({ item }: { item: Medicine }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.title}>{item.name}</Text>
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={() => toggleFavorite(item.id)}>
-            <AntDesign 
-              name={item.isFavorite ? 'star' : 'staro'} 
-              size={24} 
-              color={item.isFavorite ? '#FFD700' : '#C0C0C0'} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => deleteMedicine(item.id)}>
-            <AntDesign name="delete" size={24} color="#FF3B30" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.details}>
-        <Text>Количество: {item.quantity}</Text>
-        <Text>Дозировка: {item.dosage}</Text>
-        <Text>Годен до: {item.expirationDate}</Text>
-        <Text>Категория: {item.category}</Text>
-      </View>
-
-      {item.image && (
-        <Image source={{ uri: item.image }} style={styles.image} />
-      )}
-    </View>
   );
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={medicines}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={loadMedicines}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>Список лекарств пуст</Text>
-            <Link href="/AddMedicine" asChild>
-              <TouchableOpacity style={styles.addButton}>
-                <Text style={styles.buttonText}>Добавить лекарство</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
-        }
-      />
+      {/* 📢 Баннер */}
+      <View style={styles.banner}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.bannerTitle}>{banner.title}</Text>
+          <Text style={styles.bannerSubtitle}>{banner.subtitle}</Text>
+        </View>
+        <Image source={banner.image} style={styles.bannerImage} />
+      </View>
 
-      <Link href="/AddMedicine" asChild>
-        <TouchableOpacity style={styles.fab}>
-          <AntDesign name="plus" size={24} color="white" />
-        </TouchableOpacity>
-      </Link>
+      {/* 🔔 Уведомления */}
+      <TouchableOpacity
+        style={styles.menuItem}
+        onPress={() => router.push('/Notifications')}
+      >
+        <Feather name="bell" size={20} color="#333" />
+        <Text style={styles.menuText}>Уведомления</Text>
+        <Feather name="chevron-right" size={20} color="#ccc" />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.menuItem}
+        onPress={() => router.push('/Authors')}
+      >
+        <Feather name="users" size={20} color="#333" />
+        <Text style={styles.menuText}>Авторы проекта</Text>
+        <Feather name="chevron-right" size={20} color="#ccc" />
+      </TouchableOpacity>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingTop: 60
+  },
+  banner: {
+    backgroundColor: '#39798F33',
+    borderRadius: 16,
     padding: 16,
-    backgroundColor: '#f5f5f5'
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2
-  },
-  cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8
+    marginBottom: 30
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    flex: 1
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 16
-  },
-  details: {
-    gap: 4,
-    marginBottom: 12
-  },
-  image: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16
-  },
-  emptyText: {
+  bannerTitle: {
     fontSize: 16,
-    color: '#666'
+    fontWeight: '600',
+    color: '#0077B6'
   },
-  addButton: {
-    padding: 12,
-    backgroundColor: '#007AFF',
-    borderRadius: 8
+  bannerSubtitle: {
+    fontSize: 13,
+    color: '#444',
+    marginTop: 4
   },
-  buttonText: {
-    color: 'white'
+  bannerFooter: {
+    fontSize: 11,
+    color: '#39798F',
+    marginTop: 8,
+    fontStyle: 'italic'
   },
-  fab: {
-    position: 'absolute',
-    bottom: 32,
-    right: 32,
-    backgroundColor: '#007AFF',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
+  bannerImage: {
+    width: 100,
+    height: 100,
+    resizeMode: 'contain',
+    marginLeft: 10
+  },
+  menuItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    elevation: 4
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderColor: '#eee'
+  },
+  menuText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 16,
+    color: '#333'
   }
 });
-
-export default MedicineListScreen;

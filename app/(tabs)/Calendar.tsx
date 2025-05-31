@@ -1,289 +1,290 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Button,
-  Alert,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
+import { format, isSameDay } from 'date-fns';
+import { ru } from 'date-fns/locale';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 
-interface MedicineReminder {
+interface Reminder {
   id: string;
   medicineName: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:mm
-  notificationId?: string;
+  dosage: string;
+  time: string;
+  days?: number[];
+  date?: string;
+  notificationIds?: string[];
 }
 
-const MedicineReminderScreen = () => {
-  const [medicineName, setMedicineName] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [time, setTime] = useState(new Date());
-  const [reminders, setReminders] = useState<MedicineReminder[]>([]);
+const TIME_SLOTS = ['08:00', '10:00', '12:00', '15:00', '18:00', '21:00'];
+const months = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+];
 
-  useEffect(() => {
-    loadReminders();
-    registerForPushNotificationsAsync();
-  }, []);
+export default function CalendarScreen() {
+  const now = new Date();
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(now.getMonth());
+  const [selectedYear] = useState(now.getFullYear());
+  const [selectedDate, setSelectedDate] = useState(format(now, 'yyyy-MM-dd'));
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const router = useRouter();
 
-  async function registerForPushNotificationsAsync() {
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status !== 'granted') {
-      const { status: newStatus } = await Notifications.requestPermissionsAsync();
-      if (newStatus !== 'granted') {
-        Alert.alert('Ошибка', 'Необходимо разрешение на уведомления');
+  useFocusEffect(
+    useCallback(() => {
+      const loadReminders = async () => {
+        const stored = await AsyncStorage.getItem('medicineReminders');
+        if (stored) setReminders(JSON.parse(stored));
+      };
+      loadReminders();
+    }, [])
+  );
+
+  const confirmDeleteReminder = (id: string) => {
+    Alert.alert('Удаление', 'Удалить это напоминание?', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () => handleDeleteReminder(id)
       }
-    }
-  }
+    ]);
+  };
 
-  const loadReminders = async () => {
+  const handleDeleteReminder = async (id: string) => {
     try {
       const stored = await AsyncStorage.getItem('medicineReminders');
-      if (stored) {
-        setReminders(JSON.parse(stored));
+      if (!stored) return;
+
+      const existing: Reminder[] = JSON.parse(stored);
+      const toDelete = existing.find(r => r.id === id);
+
+      if (toDelete?.notificationIds?.length) {
+        for (const notifId of toDelete.notificationIds) {
+          await Notifications.cancelScheduledNotificationAsync(notifId);
+        }
       }
-    } catch (error) {
-      console.error('Ошибка загрузки напоминаний:', error);
-      Alert.alert('Ошибка', 'Не удалось загрузить напоминания');
+
+      const updated = existing.filter(r => r.id !== id);
+      await AsyncStorage.setItem('medicineReminders', JSON.stringify(updated));
+      setReminders(updated);
+    } catch (err) {
+      console.error('Ошибка при удалении:', err);
     }
   };
 
-  const saveReminders = async (newReminders: MedicineReminder[]) => {
-    try {
-      await AsyncStorage.setItem('medicineReminders', JSON.stringify(newReminders));
-      setReminders(newReminders);
-    } catch (error) {
-      console.error('Ошибка сохранения напоминания:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить напоминание');
-    }
+  const getRemindersForSlot = (time: string) => {
+    const currentDate = new Date(selectedDate);
+    const weekday = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
+
+    return reminders.filter(r => {
+      const timeMatch = r.time.startsWith(time);
+      const isRepeat = r.days?.includes(weekday);
+      const isExact = r.date && isSameDay(new Date(r.date), currentDate);
+      return timeMatch && (isRepeat || isExact);
+    });
   };
 
-  const pad = (num: number) => num.toString().padStart(2, '0');
+  const renderDateSelector = () => {
+    const daysInMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
 
-  const scheduleNotification = async (reminder: MedicineReminder) => {
-    const [year, month, day] = reminder.date.split('-').map(Number);
-    const [hour, minute] = reminder.time.split(':').map(Number);
-  
-    const trigger: Notifications.CalendarTriggerInput = {
-      type: Notifications.SchedulableTriggerInputTypes.CALENDAR, 
-      year,
-      month,
-      day,
-      hour,
-      minute,
-      second: 0, 
-    };
-  
-    const now = new Date();
-    const scheduledTime = new Date(year, month - 1, day, hour, minute);
-  
-    if (scheduledTime <= now) {
-      Alert.alert('Ошибка', 'Выберите дату и время в будущем');
-      return null;
-    }
-  
-    try {
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Напоминание о приеме лекарства',
-          body: `Пора принять: ${reminder.medicineName}`,
-          sound: true,
-        },
-        trigger, 
-      });
-      return notificationId;
-    } catch (error) {
-      console.error('Ошибка планирования уведомления:', error);
-      Alert.alert('Ошибка', 'Не удалось запланировать уведомление');
-      return null;
-    }
-  };
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+      const date = new Date(selectedYear, selectedMonthIndex, i + 1);
+      return {
+        date,
+        iso: format(date, 'yyyy-MM-dd'),
+        day: format(date, 'dd'),
+        weekday: format(date, 'EEE', { locale: ru })
+      };
+    });
 
-  const addReminder = async () => {
-    if (!medicineName.trim()) {
-      Alert.alert('Ошибка', 'Введите название лекарства');
-      return;
-    }
+    return (
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
+          {months.map((month, index) => (
+            <TouchableOpacity key={month} onPress={() => setSelectedMonthIndex(index)}>
+              <Text style={[styles.monthText, index === selectedMonthIndex && styles.activeMonth]}>
+                {month}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
-    const isoDate = date.toISOString().split('T')[0];
-    const timeStr = `${pad(time.getHours())}:${pad(time.getMinutes())}`;
-
-    const newReminder: MedicineReminder = {
-      id: Date.now().toString(),
-      medicineName: medicineName.trim(),
-      date: isoDate,
-      time: timeStr,
-    };
-
-    const notificationId = await scheduleNotification(newReminder);
-    if (notificationId) {
-      newReminder.notificationId = notificationId;
-      const updated = [...reminders, newReminder];
-      await saveReminders(updated);
-
-      Alert.alert('Успех', 'Напоминание добавлено');
-
-      setMedicineName('');
-      setDate(new Date());
-      setTime(new Date());
-    }
-  };
-
-  const deleteReminder = async (id: string, notificationId?: string) => {
-    if (notificationId) {
-      try {
-        await Notifications.cancelScheduledNotificationAsync(notificationId);
-      } catch {}
-    }
-    const filtered = reminders.filter(r => r.id !== id);
-    await saveReminders(filtered);
-  };
-
-  const onDateChange = (itemValue: number, field: 'year' | 'month' | 'day') => {
-    let newDate = new Date(date);
-    if (field === 'year') newDate.setFullYear(itemValue);
-    if (field === 'month') newDate.setMonth(itemValue - 1); 
-    if (field === 'day') newDate.setDate(itemValue);
-    setDate(newDate);
-  };
-
-  const onTimeChange = (itemValue: number, field: 'hour' | 'minute') => {
-    let newTime = new Date(time);
-    if (field === 'hour') newTime.setHours(itemValue);
-    if (field === 'minute') newTime.setMinutes(itemValue);
-    setTime(newTime);
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayScroll}>
+          {days.map(({ iso, day, weekday }) => {
+            const isSelected = iso === selectedDate;
+            return (
+              <TouchableOpacity
+                key={iso}
+                onPress={() => setSelectedDate(iso)}
+                style={[styles.dayBox, isSelected && styles.dayBoxActive]}
+              >
+                <Text style={[styles.dayNumber, isSelected && styles.dayTextActive]}>{day}</Text>
+                <Text style={[styles.dayLabel, isSelected && styles.dayTextActive]}>{weekday}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Название лекарства:</Text>
-      <TextInput
-        style={styles.input}
-        value={medicineName}
-        onChangeText={setMedicineName}
-        placeholder="Введите название"
-      />
+      <Text style={styles.header}>
+        {format(new Date(selectedDate), 'd MMMM yyyy', { locale: ru })}
+      </Text>
 
-      <Text style={styles.label}>Дата приема:</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={date.getFullYear()}
-          onValueChange={(itemValue) => onDateChange(itemValue, 'year')}>
-          {[...Array(10).keys()].map(i => (
-            <Picker.Item key={i} label={`${2025 + i}`} value={2025 + i} />
-          ))}
-        </Picker>
+      {renderDateSelector()}
 
-        <Picker
-          selectedValue={date.getMonth() + 1}
-          onValueChange={(itemValue) => onDateChange(itemValue, 'month')}>
-          {[...Array(12).keys()].map(i => (
-            <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
-          ))}
-        </Picker>
-
-        <Picker
-          selectedValue={date.getDate()}
-          onValueChange={(itemValue) => onDateChange(itemValue, 'day')}>
-          {[...Array(31).keys()].map(i => (
-            <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
-          ))}
-        </Picker>
-      </View>
-
-      <Text style={styles.label}>Время приема:</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={time.getHours()}
-          onValueChange={(itemValue) => onTimeChange(itemValue, 'hour')}>
-          {[...Array(24).keys()].map(i => (
-            <Picker.Item key={i} label={`${i}`} value={i} />
-          ))}
-        </Picker>
-
-        <Picker
-          selectedValue={time.getMinutes()}
-          onValueChange={(itemValue) => onTimeChange(itemValue, 'minute')}>
-          {[...Array(60).keys()].map(i => (
-            <Picker.Item key={i} label={`${i}`} value={i} />
-          ))}
-        </Picker>
-      </View>
-
-      <View style={{ marginTop: 20 }}>
-        <Button title="Добавить прием" onPress={addReminder} />
-      </View>
-
-      <ScrollView style={{ marginTop: 30, maxHeight: 300 }}>
-        <Text style={{ fontWeight: 'bold', fontSize: 18 }}>Напоминания:</Text>
-        {reminders.length === 0 && <Text>Пока нет напоминаний</Text>}
-        {reminders.map(r => (
-          <View key={r.id} style={styles.reminderItem}>
-            <Text style={styles.reminderText}>
-              {r.medicineName} - {r.date} в {r.time}
-            </Text>
-            <TouchableOpacity
-              onPress={() =>
-                Alert.alert(
-                  'Удалить напоминание',
-                  'Вы уверены, что хотите удалить это напоминание?',
-                  [
-                    { text: 'Отмена', style: 'cancel' },
-                    {
-                      text: 'Удалить',
-                      style: 'destructive',
-                      onPress: () => deleteReminder(r.id, r.notificationId),
-                    },
-                  ]
-                )
-              }
-            >
-              <Text style={styles.deleteText}>Удалить</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
+      <ScrollView style={{ flex: 1 }}>
+        {TIME_SLOTS.map(slot => {
+          const items = getRemindersForSlot(slot);
+          return (
+            <View key={slot} style={styles.timeRow}>
+              <View style={styles.timeLabelBox}>
+                <Text style={styles.timeLabel}>{slot}</Text>
+              </View>
+              <View style={styles.reminderBox}>
+                {items.length > 0 ? (
+                  items.map(item => (
+                    <View key={item.id} style={styles.medicineCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.medicineName}>{item.medicineName}</Text>
+                        <Text style={styles.dosage}>{item.dosage}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => confirmDeleteReminder(item.id)}>
+                        <Text style={styles.deleteText}>Удалить</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyText}>—</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })}
       </ScrollView>
+
+      <TouchableOpacity style={styles.addButton} onPress={() => router.push('/AddReminder')}>
+        <Text style={styles.addButtonText}>＋ Добавить напоминание</Text>
+      </TouchableOpacity>
     </View>
   );
-};
-
-export default MedicineReminderScreen;
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  label: { fontSize: 16, marginVertical: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 8,
-    borderRadius: 6,
-    fontSize: 16,
+  container: { flex: 1, backgroundColor: '#fff', paddingTop: 60 },
+  header: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 20,
+    marginBottom: 10
   },
-  reminderItem: {
-    marginTop: 10,
+  monthScroll: {
+    paddingHorizontal: 20,
+    marginBottom: 10
+  },
+  monthText: {
+    fontSize: 16,
+    color: '#999',
+    marginRight: 15
+  },
+  activeMonth: {
+    color: '#00BBD4',
+    fontWeight: 'bold'
+  },
+  dayScroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 10
+  },
+  dayBox: {
+    width: 50,
+    alignItems: 'center',
+    marginRight: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#eee'
+  },
+  dayBoxActive: {
+    backgroundColor: '#00BBD4'
+  },
+  dayNumber: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333'
+  },
+  dayLabel: {
+    fontSize: 12,
+    color: '#777'
+  },
+  dayTextActive: {
+    color: '#fff'
+  },
+  timeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 10,
+    alignItems: 'center'
+  },
+  timeLabelBox: {
+    width: 60
+  },
+  timeLabel: {
+    fontSize: 14,
+    color: '#999'
+  },
+  reminderBox: {
+    flex: 1,
+    backgroundColor: '#F2F2F2',
+    borderRadius: 10,
+    padding: 10
+  },
+  medicineCard: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
     padding: 12,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    backgroundColor: '#fafafa',
-  },
-  reminderText: {
-    fontSize: 16,
     marginBottom: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  medicineName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333'
+  },
+  dosage: {
+    fontSize: 12,
+    color: '#666'
   },
   deleteText: {
     color: 'red',
-    fontWeight: 'bold',
-    fontSize: 14,
+    fontWeight: 'bold'
   },
-  pickerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  emptyCard: {
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
+  emptyText: {
+    color: '#ccc'
+  },
+  addButton: {
+    backgroundColor: '#39798F',
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    margin: 20
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600'
+  }
 });

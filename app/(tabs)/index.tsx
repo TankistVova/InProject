@@ -46,20 +46,18 @@ export default function App() {
   const router = useRouter();
 
   // Категории без count, количество будет вычисляться динамически
-  const categories: Category[] = [
-    { id: 0, name: 'Все', icon: 'list' },
-    { id: 1, name: 'Обезболивающие', icon: 'pills' },
-    { id: 2, name: 'Антибиотики', icon: 'syringe' },
-    { id: 3, name: 'Противовоспалительные', icon: 'capsules' },
-    { id: 4, name: 'Антигистаминные', icon: 'leaf' },
-    { id: 5, name: 'Желудочно-кишечные', icon: 'bacteria' },
-    { id: 6, name: 'Сердечно-сосудистые', icon: 'heartbeat' },
-    { id: 7, name: 'Витамины и БАДы', icon: 'apple-alt' },
-    { id: 8, name: 'Антидепрессанты', icon: 'smile' },
-    { id: 9, name: 'Противовирусные', icon: 'virus-slash' },
-    { id: 10, name: 'Гормональные', icon: 'flask' },
-    { id: 11, name: 'Перевязочные', icon: 'band-aid' },
-  ];
+const categories: Category[] = [
+  { id: 0, name: 'Все', icon: 'list' },
+  { id: 1, name: 'От простуды', icon: 'temperature-low' },
+  { id: 2, name: 'От боли', icon: 'pills' },
+  { id: 3, name: 'От аллергии', icon: 'leaf' },
+  { id: 4, name: 'Для желудка', icon: 'stethoscope' },
+  { id: 5, name: 'Для сердца', icon: 'heartbeat' },
+  { id: 6, name: 'Для иммунитета', icon: 'shield-alt' },
+  { id: 7, name: 'Антистресс', icon: 'smile' },
+  { id: 8, name: 'Витамины', icon: 'apple-alt' },
+  { id: 9, name: 'Противовирусные', icon: 'virus' },
+];
 
   const appointmentColors = [
     '#B2EBF2', '#FFCC80', '#CE93D8', '#A5D6A7', '#80DEEA', '#F48FB1',
@@ -152,7 +150,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#fff"/>
       
       <ScrollView
         refreshControl={
@@ -163,19 +161,6 @@ export default function App() {
           />
         }
       >
-        {/* Поиск */}
-        <View style={styles.searchContainer}>
-          <Feather name="search" size={20} color="#666" style={styles.searchIcon} />
-          <TextInput
-            placeholder="Поиск лекарств..."
-            placeholderTextColor="#666"
-            style={styles.searchInput}
-          />
-          <TouchableOpacity style={styles.qrButton}>
-            <Ionicons name="qr-code-outline" size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
-
         {/* Записи */}
         <Text style={styles.sectionTitle}>Мои записи</Text>
         {loading ? (
@@ -254,8 +239,9 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#fff',
+      flex: 1,
+      backgroundColor: '#fff',
+      paddingTop: StatusBar.currentHeight || 0 
   },
   searchContainer: {
     flexDirection: 'row',
