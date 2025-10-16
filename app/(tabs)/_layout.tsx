@@ -58,7 +58,9 @@ export default function TabLayout() {
         <Tabs.Screen name="CategoryScreen" options={{ href: null }} />
         <Tabs.Screen name="AddReminder" options={{ href: null }} />
         <Tabs.Screen name="Notifications" options={{ href: null }} />
-         <Tabs.Screen name="Authors" options={{ href: null }} />
+        <Tabs.Screen name="Authors" options={{ href: null }} />
+         <Tabs.Screen name="Maps" options={{ href: null }} />
+
       </Tabs>
     </SafeAreaView>
   );

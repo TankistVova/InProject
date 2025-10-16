@@ -1,48 +1,72 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
   SectionList,
   StyleSheet,
   TouchableOpacity,
-  Alert
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  isToday,
-  isYesterday,
-  formatDistanceToNow
-} from 'date-fns';
+import { isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useFocusEffect } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 
-interface Reminder {
-  id: string;
-  medicineName: string;
-  dosage: string;
-  time: string;
-  date?: string;
-  days?: number[];
-  type?: 'таблетка' | 'укол' | 'капли';
-  isRead?: boolean;
-}
-
-interface NotificationItem {
+interface NotificationLog {
   id: string;
   title: string;
   subtitle: string;
-  timestamp: Date;
+  timestamp: string; // сохраняем как строку для удобства
   type: 'таблетка' | 'укол' | 'капли';
   isRead: boolean;
+  reminderId?: string;
 }
 
 interface SectionData {
   title: string;
-  data: NotificationItem[];
+  data: NotificationLog[];
 }
 
 export default function NotificationsScreen() {
   const [sections, setSections] = useState<SectionData[]>([]);
+
+  useEffect(() => {
+    // 🔹 Слушатель для foreground
+    const receivedSubscription = Notifications.addNotificationReceivedListener(handleNotificationLog);
+
+    // 🔹 Слушатель для тапа на уведомление (background/closed)
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const notification = response.notification;
+      handleNotificationLog(notification);
+    });
+
+    return () => {
+      receivedSubscription.remove();
+      responseSubscription.remove();
+    };
+  }, []);
+
+  // 🔹 Функция для логирования (общая для обоих слушателей)
+  const handleNotificationLog = async (notification: Notifications.Notification) => {
+    const content = notification.request.content;
+    const data = content.data;
+    const log: NotificationLog = {
+      id: Date.now().toString(),
+      title: content.title || '',
+      subtitle: content.body || '',
+      timestamp: new Date().toISOString(),
+      type: 'таблетка', // default type
+      isRead: false,
+      reminderId: data?.reminderId as string | undefined,
+    };
+
+    const storedLogs = await AsyncStorage.getItem('notificationLogs');
+    const existing: NotificationLog[] = storedLogs ? JSON.parse(storedLogs) : [];
+    const updated = [...existing, log];
+    await AsyncStorage.setItem('notificationLogs', JSON.stringify(updated));
+    loadNotifications();
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -51,34 +75,29 @@ export default function NotificationsScreen() {
   );
 
   const loadNotifications = async () => {
-    const stored = await AsyncStorage.getItem('medicineReminders');
-    if (!stored) return;
+    const stored = await AsyncStorage.getItem('notificationLogs');
+    if (!stored) {
+      setSections([]);
+      return;
+    }
 
-    const reminders: Reminder[] = JSON.parse(stored);
+    const logs: NotificationLog[] = JSON.parse(stored);
+
     const now = new Date();
+    const validLogs = logs.filter(log => new Date(log.timestamp) <= now);
 
-    const all: NotificationItem[] = reminders.map(r => {
-      const timestamp = r.date ? new Date(`${r.date}T${r.time}`) : now;
-      return {
-        id: r.id,
-        title: 'Принять лекарство',
-        subtitle: `${r.medicineName} — ${r.dosage}`,
-        timestamp,
-        type: r.type || 'таблетка',
-        isRead: r.isRead || false,
-      };
-    });
+    validLogs.sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
 
-    // сортировка по дате (новые сверху)
-    all.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    const today: NotificationLog[] = [];
+    const yesterday: NotificationLog[] = [];
+    const older: NotificationLog[] = [];
 
-    const today: NotificationItem[] = [];
-    const yesterday: NotificationItem[] = [];
-    const older: NotificationItem[] = [];
-
-    for (const item of all) {
-      if (isToday(item.timestamp)) today.push(item);
-      else if (isYesterday(item.timestamp)) yesterday.push(item);
+    for (const item of validLogs) {
+      const ts = new Date(item.timestamp);
+      if (isToday(ts)) today.push(item);
+      else if (isYesterday(ts)) yesterday.push(item);
       else older.push(item);
     }
 
@@ -91,13 +110,13 @@ export default function NotificationsScreen() {
   };
 
   const toggleRead = async (id: string) => {
-    const stored = await AsyncStorage.getItem('medicineReminders');
+    const stored = await AsyncStorage.getItem('notificationLogs');
     if (!stored) return;
-    const reminders: Reminder[] = JSON.parse(stored);
-    const updated = reminders.map(r =>
-      r.id === id ? { ...r, isRead: !r.isRead } : r
+    const logs: NotificationLog[] = JSON.parse(stored);
+    const updated = logs.map(l =>
+      l.id === id ? { ...l, isRead: !l.isRead } : l
     );
-    await AsyncStorage.setItem('medicineReminders', JSON.stringify(updated));
+    await AsyncStorage.setItem('notificationLogs', JSON.stringify(updated));
     loadNotifications();
   };
 
@@ -108,29 +127,26 @@ export default function NotificationsScreen() {
         text: 'Удалить',
         style: 'destructive',
         onPress: async () => {
-          const stored = await AsyncStorage.getItem('medicineReminders');
+          const stored = await AsyncStorage.getItem('notificationLogs');
           if (!stored) return;
-          const reminders: Reminder[] = JSON.parse(stored);
-          const updated = reminders.filter(r => r.id !== id);
-          await AsyncStorage.setItem('medicineReminders', JSON.stringify(updated));
+          const logs: NotificationLog[] = JSON.parse(stored);
+          const updated = logs.filter(l => l.id !== id);
+          await AsyncStorage.setItem('notificationLogs', JSON.stringify(updated));
           loadNotifications();
-        }
-      }
+        },
+      },
     ]);
   };
 
-  const getIcon = (type: NotificationItem['type']) => {
+  const getIcon = (type: NotificationLog['type']) => {
     switch (type) {
-      case 'укол':
-        return '💉';
-      case 'капли':
-        return '🍵';
-      default:
-        return '💊';
+      case 'укол': return '💉';
+      case 'капли': return '🍵';
+      default: return '💊';
     }
   };
 
-  const renderItem = ({ item }: { item: NotificationItem }) => (
+  const renderItem = ({ item }: { item: NotificationLog }) => (
     <TouchableOpacity
       onPress={() => toggleRead(item.id)}
       onLongPress={() => deleteNotification(item.id)}
@@ -138,15 +154,11 @@ export default function NotificationsScreen() {
     >
       <Text style={styles.icon}>{getIcon(item.type)}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.title, item.isRead && styles.readText]}>
-          {item.title}
-        </Text>
-        <Text style={[styles.subtitle, item.isRead && styles.readText]}>
-          {item.subtitle}
-        </Text>
+        <Text style={[styles.title, item.isRead && styles.readText]}>{item.title}</Text>
+        <Text style={[styles.subtitle, item.isRead && styles.readText]}>{item.subtitle}</Text>
       </View>
       <Text style={styles.timeAgo}>
-        {formatDistanceToNow(item.timestamp, { locale: ru, addSuffix: true })}
+        {formatDistanceToNow(new Date(item.timestamp), { locale: ru, addSuffix: true })}
       </Text>
     </TouchableOpacity>
   );
@@ -161,9 +173,7 @@ export default function NotificationsScreen() {
           <Text style={styles.sectionTitle}>{title}</Text>
         )}
         stickySectionHeadersEnabled={false}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Нет уведомлений</Text>
-        }
+        ListEmptyComponent={<Text style={styles.emptyText}>Нет уведомлений</Text>}
       />
     </View>
   );
@@ -171,50 +181,12 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', paddingTop: 60 },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 8,
-    color: '#999',
-  },
-  notificationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomColor: '#eee',
-    borderBottomWidth: 1,
-    gap: 12,
-  },
-  icon: {
-    fontSize: 20,
-    marginTop: 4,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#555',
-  },
-  timeAgo: {
-    fontSize: 12,
-    color: '#999',
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  readText: {
-    color: '#bbb',
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 100,
-    color: '#aaa',
-    fontSize: 16,
-  },
+  sectionTitle: { fontSize: 14, fontWeight: '600', marginHorizontal: 16, marginTop: 24, marginBottom: 8, color: '#999' },
+  notificationItem: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingVertical: 12, borderBottomColor: '#eee', borderBottomWidth: 1, gap: 12 },
+  icon: { fontSize: 20, marginTop: 4 },
+  title: { fontSize: 15, fontWeight: '600', color: '#333', marginBottom: 4 },
+  subtitle: { fontSize: 13, color: '#555' },
+  timeAgo: { fontSize: 12, color: '#999', alignSelf: 'flex-start', marginTop: 4 },
+  readText: { color: '#bbb' },
+  emptyText: { textAlign: 'center', marginTop: 100, color: '#aaa', fontSize: 16 },
 });

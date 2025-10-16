@@ -3,10 +3,11 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { format, isSameDay } from 'date-fns';
+import { format, isSameDay, getDay } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface Reminder {
   id: string;
@@ -18,7 +19,16 @@ interface Reminder {
   notificationIds?: string[];
 }
 
-const TIME_SLOTS = ['08:00', '10:00', '12:00', '15:00', '18:00', '21:00'];
+interface NotificationLog {
+  id: string;
+  title: string;
+  subtitle: string;
+  timestamp: Date;
+  type: 'таблетка' | 'укол' | 'капли';
+  isRead: boolean;
+  reminderId?: string;
+}
+
 const months = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
@@ -55,11 +65,12 @@ export default function CalendarScreen() {
 
   const handleDeleteReminder = async (id: string) => {
     try {
-      const stored = await AsyncStorage.getItem('medicineReminders');
-      if (!stored) return;
+      // Delete from reminders
+      const storedReminders = await AsyncStorage.getItem('medicineReminders');
+      if (!storedReminders) return;
 
-      const existing: Reminder[] = JSON.parse(stored);
-      const toDelete = existing.find(r => r.id === id);
+      const existingReminders: Reminder[] = JSON.parse(storedReminders);
+      const toDelete = existingReminders.find(r => r.id === id);
 
       if (toDelete?.notificationIds?.length) {
         for (const notifId of toDelete.notificationIds) {
@@ -67,24 +78,46 @@ export default function CalendarScreen() {
         }
       }
 
-      const updated = existing.filter(r => r.id !== id);
-      await AsyncStorage.setItem('medicineReminders', JSON.stringify(updated));
-      setReminders(updated);
+      const updatedReminders = existingReminders.filter(r => r.id !== id);
+      await AsyncStorage.setItem('medicineReminders', JSON.stringify(updatedReminders));
+      setReminders(updatedReminders);
+
+      // Also delete related logs from notificationLogs
+      const storedLogs = await AsyncStorage.getItem('notificationLogs');
+      if (storedLogs) {
+        const existingLogs: NotificationLog[] = JSON.parse(storedLogs);
+        const updatedLogs = existingLogs.filter(l => l.reminderId !== id);
+        await AsyncStorage.setItem('notificationLogs', JSON.stringify(updatedLogs));
+      }
+
+      Alert.alert('Успех', 'Напоминание удалено');
     } catch (err) {
       console.error('Ошибка при удалении:', err);
+      Alert.alert('Ошибка', 'Не удалось удалить напоминание');
     }
   };
 
-  const getRemindersForSlot = (time: string) => {
-    const currentDate = new Date(selectedDate);
-    const weekday = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
+  const hasRemindersOnDate = (date: Date) => {
+    const weekday = getDay(date) === 0 ? 7 : getDay(date);
+    return reminders.some(r => 
+      r.days?.includes(weekday) || (r.date && isSameDay(new Date(r.date), date))
+    );
+  };
 
-    return reminders.filter(r => {
-      const timeMatch = r.time.startsWith(time);
+  const getRemindersForDay = () => {
+    const currentDate = new Date(selectedDate);
+    const weekday = getDay(currentDate) === 0 ? 7 : getDay(currentDate);
+
+    const items = reminders.filter(r => {
       const isRepeat = r.days?.includes(weekday);
       const isExact = r.date && isSameDay(new Date(r.date), currentDate);
-      return timeMatch && (isRepeat || isExact);
+      return isRepeat || isExact;
     });
+
+    // Sort by time
+    items.sort((a, b) => a.time.localeCompare(b.time));
+
+    return items;
   };
 
   const renderDateSelector = () => {
@@ -96,7 +129,8 @@ export default function CalendarScreen() {
         date,
         iso: format(date, 'yyyy-MM-dd'),
         day: format(date, 'dd'),
-        weekday: format(date, 'EEE', { locale: ru })
+        weekday: format(date, 'EEE', { locale: ru }),
+        hasReminders: hasRemindersOnDate(date)
       };
     });
 
@@ -113,7 +147,7 @@ export default function CalendarScreen() {
         </ScrollView>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayScroll}>
-          {days.map(({ iso, day, weekday }) => {
+          {days.map(({ iso, day, weekday, hasReminders }) => {
             const isSelected = iso === selectedDate;
             return (
               <TouchableOpacity
@@ -123,6 +157,9 @@ export default function CalendarScreen() {
               >
                 <Text style={[styles.dayNumber, isSelected && styles.dayTextActive]}>{day}</Text>
                 <Text style={[styles.dayLabel, isSelected && styles.dayTextActive]}>{weekday}</Text>
+                {hasReminders && (
+                  <View style={[styles.reminderDot, isSelected && styles.reminderDotActive]} />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -140,35 +177,36 @@ export default function CalendarScreen() {
       {renderDateSelector()}
 
       <ScrollView style={{ flex: 1 }}>
-        {TIME_SLOTS.map(slot => {
-          const items = getRemindersForSlot(slot);
-          return (
-            <View key={slot} style={styles.timeRow}>
+        {getRemindersForDay().length > 0 ? (
+          getRemindersForDay().map(item => (
+            <View key={item.id} style={styles.timeRow}>
               <View style={styles.timeLabelBox}>
-                <Text style={styles.timeLabel}>{slot}</Text>
+                <Text style={styles.timeLabel}>{item.time}</Text>
               </View>
               <View style={styles.reminderBox}>
-                {items.length > 0 ? (
-                  items.map(item => (
-                    <View key={item.id} style={styles.medicineCard}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.medicineName}>{item.medicineName}</Text>
-                        <Text style={styles.dosage}>{item.dosage}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => confirmDeleteReminder(item.id)}>
-                        <Text style={styles.deleteText}>Удалить</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
-                ) : (
-                  <View style={styles.emptyCard}>
-                    <Text style={styles.emptyText}>—</Text>
+                <View style={styles.medicineCard}>
+                  <MaterialIcons 
+                    name="medication" 
+                    size={24} 
+                    color="#39798F" 
+                    style={styles.medicineIcon}
+                  />
+                  <View style={styles.medicineInfo}>
+                    <Text style={styles.medicineName}>{item.medicineName}</Text>
+                    <Text style={styles.dosage}>{item.dosage}</Text>
                   </View>
-                )}
+                  <TouchableOpacity onPress={() => confirmDeleteReminder(item.id)}>
+                    <Text style={styles.deleteText}>Удалить</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          );
-        })}
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Нет напоминаний на этот день</Text>
+          </View>
+        )}
       </ScrollView>
 
       <TouchableOpacity style={styles.addButton} onPress={() => router.push('/AddReminder')}>
@@ -226,6 +264,16 @@ const styles = StyleSheet.create({
   dayTextActive: {
     color: '#fff'
   },
+  reminderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#39798F',
+    marginTop: 4
+  },
+  reminderDotActive: {
+    backgroundColor: '#fff'
+  },
   timeRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -254,6 +302,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center'
   },
+  medicineIcon: {
+    marginRight: 5,
+  },
+  medicineInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
   medicineName: {
     fontSize: 16,
     fontWeight: '500',
@@ -267,13 +322,15 @@ const styles = StyleSheet.create({
     color: 'red',
     fontWeight: 'bold'
   },
-  emptyCard: {
-    height: 50,
+  emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginTop: 50
   },
   emptyText: {
-    color: '#ccc'
+    color: '#ccc',
+    fontSize: 16
   },
   addButton: {
     backgroundColor: '#39798F',

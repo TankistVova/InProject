@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Platform,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
-import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
+import { router } from 'expo-router';
 
 interface Reminder {
   id: string;
@@ -27,7 +34,7 @@ const daysOfWeek = [
   { id: 7, label: 'Вс' },
 ];
 
-const AddReminder: React.FC = () => {
+export default function AddReminder() {
   const [medicineName, setMedicineName] = useState('');
   const [dosage, setDosage] = useState('');
   const [time, setTime] = useState(new Date());
@@ -35,7 +42,32 @@ const AddReminder: React.FC = () => {
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
   useEffect(() => {
-    Notifications.requestPermissionsAsync();
+    // Настройка обработчика уведомлений (для показа в foreground)
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true, // 🔹 Замена deprecated shouldShowAlert: показ баннера
+        shouldShowList: true,   // 🔹 Добавлено: добавление в центр уведомлений
+        shouldPlaySound: true,  // Включили звук
+        shouldSetBadge: false,
+      }),
+    });
+
+    // Запрос разрешений
+    Notifications.requestPermissionsAsync().then(({ status }) => {
+      if (status !== 'granted') {
+        Alert.alert('Ошибка', 'Разрешение на уведомления не предоставлено');
+      }
+    });
+
+    // Создание канала для Android
+    if (Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
   }, []);
 
   const toggleDay = (dayId: number) => {
@@ -44,19 +76,17 @@ const AddReminder: React.FC = () => {
     );
   };
 
-  const getNextWeekdayTimeInSeconds = (targetWeekday: number, targetTime: Date): number => {
-    const now = new Date();
-    const todayWeekday = now.getDay() === 0 ? 7 : now.getDay();
-    const diff = (targetWeekday - todayWeekday + 7) % 7;
-    const nextDate = new Date(now);
-    nextDate.setDate(now.getDate() + diff);
-    nextDate.setHours(targetTime.getHours(), targetTime.getMinutes(), 0, 0);
-    return Math.max(5, Math.floor((nextDate.getTime() - now.getTime()) / 1000));
-  };
-
   const handleSave = async () => {
-    if (!medicineName || !dosage || selectedDays.length === 0) {
-      Alert.alert('Ошибка', 'Заполните все поля и выберите дни');
+    if (!medicineName.trim()) {
+      Alert.alert('Ошибка', 'Введите название лекарства');
+      return;
+    }
+    if (!dosage.trim()) {
+      Alert.alert('Ошибка', 'Укажите дозировку');
+      return;
+    }
+    if (selectedDays.length === 0) {
+      Alert.alert('Ошибка', 'Выберите хотя бы один день приёма');
       return;
     }
 
@@ -66,18 +96,24 @@ const AddReminder: React.FC = () => {
 
     try {
       for (const day of selectedDays) {
-        const seconds = getNextWeekdayTimeInSeconds(day, time);
+        const expoWeekday = day === 7 ? 1 : day + 1; // Expo: Sunday=1, Monday=2, ...
+
+        const trigger = {
+          weekday: expoWeekday,
+          hour: time.getHours(),
+          minute: time.getMinutes(),
+          repeats: true,
+          channelId: Platform.OS === 'android' ? 'default' : undefined, // 🔹 Перемещено внутрь trigger!
+        } as any;
+
         const notifId = await Notifications.scheduleNotificationAsync({
           content: {
             title: 'Напоминание о приёме',
             body: `${medicineName} — ${dosage}`,
             sound: true,
+            data: { reminderId: id },
           },
-          trigger: {
-            type: 'timeInterval',
-            seconds,
-            repeats: false,
-          } as Notifications.NotificationTriggerInput
+          trigger,
         });
 
         notificationIds.push(notifId);
@@ -94,30 +130,38 @@ const AddReminder: React.FC = () => {
 
       const stored = await AsyncStorage.getItem('medicineReminders');
       const existing: Reminder[] = stored ? JSON.parse(stored) : [];
-      existing.push(newReminder);
-      await AsyncStorage.setItem('medicineReminders', JSON.stringify(existing));
+      const updated = [...existing, newReminder];
+      await AsyncStorage.setItem('medicineReminders', JSON.stringify(updated));
 
       Alert.alert('Успех', 'Напоминание сохранено');
       router.replace('/(tabs)/Calendar');
     } catch (err) {
-      console.error('Ошибка уведомления:', err);
+      console.error('Ошибка создания уведомления:', err);
       Alert.alert('Ошибка', 'Не удалось создать уведомление');
     }
   };
 
   const handleClearAllNotifications = async () => {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    Alert.alert('Готово', 'Все уведомления удалены');
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      Alert.alert('Готово', 'Все уведомления удалены');
+    } catch (err) {
+      console.error('Ошибка удаления уведомлений:', err);
+      Alert.alert('Ошибка', 'Не удалось удалить уведомления');
+    }
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
+      <Text style={styles.heading}>Добавить напоминание</Text>
+
       <Text style={styles.label}>Название лекарства</Text>
       <TextInput
         style={styles.input}
         value={medicineName}
         onChangeText={setMedicineName}
-        placeholder="Анальгин"
+        placeholder="Например: Парацетамол"
+        placeholderTextColor="#999"
       />
 
       <Text style={styles.label}>Дозировка</Text>
@@ -125,12 +169,16 @@ const AddReminder: React.FC = () => {
         style={styles.input}
         value={dosage}
         onChangeText={setDosage}
-        placeholder="1 таблетка"
+        placeholder="Например: 500 мг"
+        placeholderTextColor="#999"
       />
 
-      <Text style={styles.label}>Время приёма</Text>
-      <TouchableOpacity style={styles.timeButton} onPress={() => setShowTimePicker(true)}>
-        <Text>{format(time, 'HH:mm')}</Text>
+      <Text style={styles.label}>Время</Text>
+      <TouchableOpacity
+        style={styles.timeButton}
+        onPress={() => setShowTimePicker(true)}
+      >
+        <Text style={styles.timeText}>{format(time, 'HH:mm')}</Text>
       </TouchableOpacity>
 
       {showTimePicker && (
@@ -145,62 +193,71 @@ const AddReminder: React.FC = () => {
         />
       )}
 
-      <Text style={styles.label}>Дни приёма</Text>
+      <Text style={styles.label}>Дни недели</Text>
       <View style={styles.daysRow}>
         {daysOfWeek.map(({ id, label }) => (
           <TouchableOpacity
             key={id}
-            style={[styles.dayButton, selectedDays.includes(id) && styles.dayButtonSelected]}
+            style={[
+              styles.dayButton,
+              selectedDays.includes(id) && styles.dayButtonSelected
+            ]}
             onPress={() => toggleDay(id)}
           >
-            <Text style={[styles.dayText, selectedDays.includes(id) && styles.dayTextSelected]}>
+            <Text
+              style={[
+                styles.dayText,
+                selectedDays.includes(id) && styles.dayTextSelected
+              ]}
+            >
               {label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+      <TouchableOpacity
+        style={styles.saveButton}
+        onPress={handleSave}
+        disabled={!medicineName || !dosage || selectedDays.length === 0}
+      >
         <Text style={styles.saveText}>Сохранить</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.saveButton, { backgroundColor: 'red', marginTop: 10 }]}
+        style={[styles.saveButton, styles.clearButton]}
         onPress={handleClearAllNotifications}
       >
-        <Text style={styles.saveText}>Очистить уведомления</Text>
+        <Text style={styles.saveText}>Очистить все уведомления</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
-};
-
-export default AddReminder;
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  label: { fontSize: 14, color: '#555', marginTop: 20, marginBottom: 5 },
+  container: { flex: 1, backgroundColor: '#fff', padding: 20 },
+  heading: { fontSize: 20, fontWeight: '600', marginBottom: 20 },
+  label: { marginTop: 10, fontSize: 16, color: '#333' },
   input: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
-    padding: 12, fontSize: 16
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
+    padding: 10, marginTop: 5, fontSize: 16, backgroundColor: '#f9f9f9'
   },
   timeButton: {
-    backgroundColor: '#eee', padding: 12, borderRadius: 8, alignItems: 'center'
+    marginTop: 5, padding: 12, backgroundColor: '#f0f0f0', borderRadius: 8, alignItems: 'center'
   },
-  daysRow: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginVertical: 10
-  },
+  timeText: { fontSize: 16 },
+  daysRow: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 15 },
   dayButton: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center'
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#f0f0f0',
+    justifyContent: 'center', alignItems: 'center', margin: 5
   },
   dayButtonSelected: { backgroundColor: '#39798F' },
-  dayText: { color: '#444', fontWeight: '500' },
+  dayText: { fontSize: 14, color: '#555' },
   dayTextSelected: { color: '#fff' },
   saveButton: {
-    backgroundColor: '#39798F', marginTop: 30,
-    padding: 16, borderRadius: 10, alignItems: 'center'
+    marginTop: 20, padding: 14, borderRadius: 8,
+    backgroundColor: '#39798F', alignItems: 'center'
   },
-  saveText: {
-    color: '#fff', fontSize: 16, fontWeight: '600'
-  }
+  clearButton: { backgroundColor: '#e74c3c', marginTop: 10 },
+  saveText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

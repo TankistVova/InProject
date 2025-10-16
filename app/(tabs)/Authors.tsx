@@ -19,50 +19,50 @@ const authors = [
   {
     name: 'Моргун Сергей',
     role: 'Frontend-разработчик',
-    desc: 'React Native, Expo, UX логика и взаимодействие.',
-    image: require('../styles/images/father.png'),
+    desc: 'React Native, Expo, UX логика и взаимодействие, реализация фронтенда на React Native, интеграция API',
+   image: require('../styles/images/L1.jpg'),
     telegram: 'https://t.me/TankistVova',
     github: 'https://github.com/TankistVova',
   },
   {
-    name: 'Моргун Сергей',
-    role: 'Frontend-разработчик',
-    desc: 'React Native, Expo, UX логика и взаимодействие.',
-    image: require('../styles/images/father.png'),
-    telegram: 'https://t.me/TankistVova',
-    github: 'https://github.com/TankistVova',
+    name: 'Чушкина Марина',
+    role: 'Дизайнер',
+    desc: 'Разработка UI/UX интерфейсов, создание визуальной концепции приложения, работа с Figma.',
+    image: require('../styles/images/D1.jpg'),
+    telegram: 'https://t.me/live16m',
+    //github: 'https://github.com/TankistVova',
   },
  {
-    name: 'Моргун Сергей',
+    name: 'Манджаари Анжелина',
     role: 'Frontend-разработчик',
-    desc: 'React Native, Expo, UX логика и взаимодействие.',
-    image: require('../styles/images/father.png'),
-    telegram: 'https://t.me/TankistVova',
-    github: 'https://github.com/TankistVova',
+    desc: 'Разработка маркетинговой стратегии, анализ конкурентов и пользовательских данных, планирование SMM-кампаний для продвижения приложения.',
+    image: require('../styles/images/AM1.jpg'),
+    instagram: 'https://www.instagram.com/anji__rose?igsh=MXc3dml2azc1Y2pwcw==', // 🔹 Изменено на Instagram
+    //github: 'https://github.com/TankistVova',
   },
  {
-    name: 'Моргун Сергей',
+    name: 'Шумская Диана',
     role: 'Frontend-разработчик',
-    desc: 'React Native, Expo, UX логика и взаимодействие.',
-    image: require('../styles/images/father.png'),
-    telegram: 'https://t.me/ivan_dev',
-    github: 'https://github.com/TankistVova',
+    desc: 'Разработка маркетинговой стратегии, анализ конкурентов и пользовательских данных, планирование SMM-кампаний для продвижения приложения.',
+    image: require('../styles/images/LM3.jpg'),
+    telegram: 'https://t.me/GogaNotYoga',
+    //github: 'https://github.com/TankistVova',
   },
    {
-    name: 'Моргун Сергей',
+    name: 'Гриненко Вика',
     role: 'Frontend-разработчик',
-    desc: 'React Native, Expo, UX логика и взаимодействие.',
-    image: require('../styles/images/father.png'),
-    telegram: 'https://t.me/ivan_dev',
-    github: 'https://github.com/TankistVova',
+    desc: 'Разработка UI/UX интерфейсов, создание визуальной концепции приложения, работа с Figma',
+    image: require('../styles/images/L3.jpg'),
+    telegram: 'https://t.me/memousse',
+    //github: 'https://github.com/TankistVova',
   },
    {
-    name: 'Моргун Сергей',
+    name: 'Плужников Иван',
     role: 'Frontend-разработчик',
-    desc: 'React Native, Expo, UX логика и взаимодействие.',
-    image: require('../styles/images/father.png'),
-    telegram: 'https://t.me/ivan_dev',
-    github: 'https://github.com/TankistVova',
+    desc: 'Разработка компонентов, тестирование UI.',
+    image: require('../styles/images/L2.jpg'),
+    telegram: 'https://t.me/ewangowa',
+    //github: 'https://github.com/TankistVova',
   },
 ];
 
@@ -82,6 +82,11 @@ export default function Authors() {
                 <TouchableOpacity onPress={() => Linking.openURL(author.telegram)}>
                   
                 <FontAwesome5 name="telegram"  size={26} color="#333" style={styles.icon} />
+                </TouchableOpacity>
+              ) : null}
+              {author.instagram ? ( // 🔹 Добавлена проверка для Instagram
+                <TouchableOpacity onPress={() => Linking.openURL(author.instagram)}>
+                  <FontAwesome name="instagram" size={30} color="#333" style={styles.icon} />
                 </TouchableOpacity>
               ) : null}
               {author.github ? (

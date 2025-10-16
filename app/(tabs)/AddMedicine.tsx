@@ -8,12 +8,15 @@ import {
   Alert,
   Image,
   ScrollView,
-  FlatList
+  FlatList,
+  Platform
 } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AntDesign, Feather, FontAwesome } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
 
 interface Medicine {
   id: string;
@@ -76,6 +79,8 @@ const ManualAddScreen: React.FC = () => {
 
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [date, setDate] = useState(new Date());
 
   const routeParams = useMemo(() => ({
     scannedName: params.scannedName?.toString() || '',
@@ -112,6 +117,15 @@ const ManualAddScreen: React.FC = () => {
       }));
     }
   }, [routeParams]);
+
+  useEffect(() => {
+    if (form.expirationDate) {
+      const [dd, mm, yyyy] = form.expirationDate.split('.');
+      if (dd && mm && yyyy) {
+        setDate(new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd)));
+      }
+    }
+  }, [form.expirationDate]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -197,6 +211,16 @@ const ManualAddScreen: React.FC = () => {
     router.push('/Scanner');
   }, []);
 
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || date;
+    setShowDatePicker(Platform.OS === 'ios');
+    setDate(currentDate);
+    setForm(prev => ({
+      ...prev,
+      expirationDate: format(currentDate, 'dd.MM.yyyy')
+    }));
+  };
+
   const renderCategoryItem = useCallback(
     ({ item }: { item: string }) => {
       const bgColor = getCategoryColor(item, categories);
@@ -272,19 +296,23 @@ const ManualAddScreen: React.FC = () => {
 
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Срок годности</Text>
-        <TextInput
-          placeholder="дд.мм.гггг"
-          value={form.expirationDate}
-          onChangeText={text => {
-            const cleaned = text.replace(/\D/g, '');
-            let formatted = cleaned;
-            if (cleaned.length > 2) formatted = `${cleaned.slice(0,2)}.${cleaned.slice(2)}`;
-            if (cleaned.length > 4) formatted = `${formatted.slice(0,5)}.${cleaned.slice(4,8)}`;
-            setForm(prev => ({ ...prev, expirationDate: formatted.slice(0,10) }));
-          }}
-          style={styles.input}
-          maxLength={10}
-        />
+        <TouchableOpacity 
+          style={styles.dateButton}
+          onPress={() => setShowDatePicker(true)}
+        >
+          <Text style={styles.dateText}>
+            {form.expirationDate || 'дд.мм.гггг'}
+          </Text>
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDateChange}
+            minimumDate={new Date()}
+          />
+        )}
       </View>
 
       <View style={styles.optionsRow}>
@@ -400,6 +428,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fff',
   },
+  dateButton: {
+    borderWidth: 1,
+    borderColor: '#bdc3c7',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+  },
+  dateText: {
+    fontSize: 16,
+    color: '#000',
+  },
   section: {
     marginVertical: 15,
   },
@@ -481,7 +521,7 @@ const styles = StyleSheet.create({
   },
   fullWidthButton: {
     width: '100%',
-    backgroundColor: '#3498db',
+    backgroundColor: '#39798F',
     borderRadius: 8,
     paddingVertical: 16,
     paddingHorizontal: 24,
@@ -518,7 +558,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   saveButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: '#39798F',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',

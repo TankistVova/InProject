@@ -16,6 +16,8 @@ import {
 import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { format, parseISO, isBefore, startOfToday } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 const { width } = Dimensions.get('window');
 const CARD_MARGIN = 10;
@@ -33,6 +35,14 @@ interface Appointment {
   doctor: string;
   specialty: string;
 }
+
+const specialties = [
+  'Терапевт', 'Педиатр', 'Стоматолог', 'Хирург', 'Кардиолог', 
+  'Офтальмолог', 'Невролог', 'Гинеколог', 'Уролог', 'Эндокринолог',
+  'Ревматолог', 'Психотерапевт', 'Диетолог', 'Физиотерапевт', 
+  'Онколог', 'ЛОР (отоларинголог)', 'Аллерголог', 'Пульмонолог',
+  'Гастроэнтеролог', 'Травматолог'
+];
 
 export default function App() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -77,8 +87,7 @@ const categories: Category[] = [
       const storedAppointments = await AsyncStorage.getItem('appointments');
       const parsedAppointments: Appointment[] = storedAppointments ? JSON.parse(storedAppointments) : [];
       const sorted = parsedAppointments.sort((a, b) => 
-        new Date(a.date.split('.').reverse().join('-')).getTime() - 
-        new Date(b.date.split('.').reverse().join('-')).getTime()
+        parseISO(a.date).getTime() - parseISO(b.date).getTime()
       );
       setAppointments(sorted);
     } catch (error) {
@@ -146,7 +155,16 @@ const categories: Category[] = [
   };
 
   // Случайный цвет для карточки записи
-  const getCardColor = () => appointmentColors[Math.floor(Math.random() * appointmentColors.length)];
+  const getCardColor = (specialty: string) => {
+    const index = specialties.indexOf(specialty) % appointmentColors.length;
+    return appointmentColors[index] || appointmentColors[0];
+  };
+
+  // Проверка, прошла ли запись
+  const isPastAppointment = (date: string, time: string) => {
+    const appointmentDateTime = parseISO(`${date}T${time}`);
+    return isBefore(appointmentDateTime, new Date());
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -172,20 +190,45 @@ const categories: Category[] = [
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.appointmentsContainer}
             renderItem={({ item, index }) => {
-              const [day, month] = item.date.split('.');
-              const weekday = new Date(`${month}.${day}.2023`).toLocaleDateString('ru-RU', { weekday: 'short' });
-              const color = getCardColor();
+              const dt = parseISO(item.date);
+              const day = format(dt, 'dd');
+              const month = format(dt, 'MMM', { locale: ru }).toUpperCase();
+              const weekday = format(dt, 'EEE', { locale: ru }).toUpperCase();
+              const color = getCardColor(item.specialty);
+              const isPast = isPastAppointment(item.date, item.time);
 
               return (
-                <View style={[styles.appointmentCard, { backgroundColor: color, width: width * 0.8 }]}>
+                <View style={[styles.appointmentCard, { backgroundColor: color, opacity: isPast ? 0.7 : 1, width: width * 0.8 }]}>
                   <View style={styles.dateBadge}>
                     <Text style={styles.dateDay}>{day}</Text>
-                    <Text style={styles.dateWeekday}>{weekday.slice(0, 2)}</Text>
+                    <Text style={styles.dateMonth}>{month}</Text>
+                    <Text style={styles.dateWeekday}>{weekday}</Text>
                   </View>
                   <View style={styles.appointmentInfo}>
-                    <Text style={styles.appointmentTime}>{item.time}</Text>
-                    <Text style={styles.doctorName}>{item.doctor}</Text>
-                    <Text style={styles.specialty}>{item.specialty}</Text>
+                    <View style={styles.timeRow}>
+                      <Ionicons name="time-outline" size={16} color="#333" style={styles.icon} />
+                      <Text style={styles.appointmentTime}>{item.time}</Text>
+                    </View>
+                    <View style={styles.doctorRow}>
+                      <Ionicons name="person-outline" size={16} color="#333" style={styles.icon} />
+                      <Text 
+                        style={styles.doctorName}
+                        numberOfLines={1}
+                        ellipsizeMode='tail'
+                      >
+                        {item.doctor}
+                      </Text>
+                    </View>
+                    <View style={styles.specialtyRow}>
+                      <Ionicons name="medkit-outline" size={16} color="#333" style={styles.icon} />
+                      <Text 
+                        style={styles.specialty}
+                        numberOfLines={1}
+                        ellipsizeMode='tail'
+                      >
+                        {item.specialty}
+                      </Text>
+                    </View>
                   </View>
                   <TouchableOpacity 
                     style={styles.optionsButton}
@@ -193,6 +236,11 @@ const categories: Category[] = [
                   >
                     <Ionicons name="ellipsis-horizontal" size={24} color="#666" />
                   </TouchableOpacity>
+                  {isPast && (
+                    <View style={styles.pastBadge}>
+                      <Text style={styles.pastText}>Прошла</Text>
+                    </View>
+                  )}
                 </View>
               );
             }}
@@ -275,23 +323,47 @@ const styles = StyleSheet.create({
   dateBadge: {
     backgroundColor: 'rgba(255,255,255,0.3)',
     borderRadius: 10,
-    padding: 12,
+    padding: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 15,
+    width: 60,
   },
   dateDay: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
   },
+  dateMonth: {
+    fontSize: 12,
+    color: '#fff',
+    textTransform: 'uppercase',
+  },
   dateWeekday: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#fff',
     textTransform: 'uppercase',
   },
   appointmentInfo: {
     flex: 1,
+    paddingRight: 30, // Добавлен отступ справа для предотвращения перекрытия
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  doctorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  specialtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  icon: {
+    marginRight: 8,
   },
   appointmentTime: {
     fontSize: 16,
@@ -300,15 +372,32 @@ const styles = StyleSheet.create({
   },
   doctorName: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    color: '#333',
+    fontWeight: '500',
   },
   specialty: {
-    fontSize: 10,
-    color: '#999',
+    fontSize: 12,
+    color: '#666',
   },
   optionsButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
     padding: 8,
+  },
+  pastBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pastText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   categoriesContainer: {
     paddingHorizontal: CARD_MARGIN,
@@ -383,5 +472,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
   },
 });

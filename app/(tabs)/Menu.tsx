@@ -61,6 +61,16 @@ export default function MenuScreen() {
         <Feather name="chevron-right" size={20} color="#ccc" />
       </TouchableOpacity>
 
+            {/* 🔔 Уведомления */}
+      <TouchableOpacity
+        style={styles.menuItem}
+        onPress={() => router.push('/Maps')}
+      >
+        <Feather name="map" size={20} color="#333" />
+        <Text style={styles.menuText}>Аптеки рядом</Text>
+        <Feather name="chevron-right" size={20} color="#ccc" />
+      </TouchableOpacity>
+
       <TouchableOpacity
         style={styles.menuItem}
         onPress={() => router.push('/Authors')}

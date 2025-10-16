@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format, isBefore, startOfDay, isEqual } from 'date-fns';
 
 interface Appointment {
   doctor: string;
@@ -14,19 +16,12 @@ interface Appointment {
 const DoctorsAppointment: React.FC = () => {
   const [doctor, setDoctor] = useState<string>('');
   const [specialty, setSpecialty] = useState<string>('Терапевт');
-  const [date, setDate] = useState<string>('');
-  const [time, setTime] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedTime, setSelectedTime] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const router = useRouter();
-
-  useEffect(() => {
-    const clearStorage = async () => {
-      await AsyncStorage.clear();
-      console.log('AsyncStorage очищен перед тестированием.');
-    };
-
-    clearStorage();
-  }, []);
 
   const specialties = [
     'Терапевт', 'Педиатр', 'Стоматолог', 'Хирург', 'Кардиолог', 
@@ -36,31 +31,62 @@ const DoctorsAppointment: React.FC = () => {
     'Гастроэнтеролог', 'Травматолог'
   ];
 
-  const isValidDate = (inputDate: string): boolean => {
-    return /^\d{4}-\d{2}-\d{2}$/.test(inputDate);
+  const handleDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (date) {
+      setSelectedDate(date);
+    }
   };
 
-  const isValidTime = (inputTime: string): boolean => {
-    return /^([01]?[0-9]|2[0-3]):([0-5][0-9])$/.test(inputTime);
+  const handleTimeChange = (event: any, time?: Date) => {
+    setShowTimePicker(Platform.OS === 'ios');
+    if (time) {
+      setSelectedTime(time);
+    }
+  };
+
+  const isValidAppointment = (): boolean => {
+    const appointmentDate = startOfDay(selectedDate);
+    const today = startOfDay(new Date());
+    
+    if (isBefore(appointmentDate, today)) {
+      Alert.alert('Ошибка', 'Дата должна быть сегодняшней или будущей.');
+      return false;
+    }
+
+    if (isEqual(appointmentDate, today)) {
+      const currentTime = new Date();
+      const appTime = new Date(selectedDate);
+      appTime.setHours(selectedTime.getHours(), selectedTime.getMinutes());
+      
+      if (isBefore(appTime, currentTime)) {
+        Alert.alert('Ошибка', 'Время для сегодняшней записи должно быть в будущем.');
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const handleAddAppointment = async () => {
-    if (!doctor || !specialty || !date || !time) {
+    if (!doctor || !specialty) {
       Alert.alert('Ошибка', 'Пожалуйста, заполните все поля.');
       return;
     }
 
-    if (!isValidDate(date)) {
-      Alert.alert('Ошибка', 'Введите дату в формате ГГГГ-ММ-ДД (например, 2025-03-20).');
+    if (!isValidAppointment()) {
       return;
     }
 
-    if (!isValidTime(time)) {
-      Alert.alert('Ошибка', 'Введите время в формате ЧЧ:ММ (например, 10:30).');
-      return;
-    }
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const timeStr = format(selectedTime, 'HH:mm');
 
-    const appointment: Appointment = { doctor: `Док. ${doctor}`, specialty, date, time };
+    const appointment: Appointment = { 
+      doctor: `Док. ${doctor}`, 
+      specialty, 
+      date: dateStr, 
+      time: timeStr 
+    };
 
     try {
       const storedAppointments = await AsyncStorage.getItem('appointments');
@@ -70,6 +96,10 @@ const DoctorsAppointment: React.FC = () => {
       await AsyncStorage.setItem('appointments', JSON.stringify(appointments));
 
       Alert.alert('Успех', 'Запись успешно добавлена!');
+      setDoctor('');
+      setSpecialty('Терапевт');
+      setSelectedDate(new Date());
+      setSelectedTime(new Date());
       router.back();
     } catch (error) {
       console.error('Ошибка при добавлении записи:', error);
@@ -99,22 +129,52 @@ const DoctorsAppointment: React.FC = () => {
         ))}
       </Picker>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Дата (ГГГГ-ММ-ДД)"
-        value={date}
-        onChangeText={setDate}
-      />
+      <Text style={styles.label}>Дата:</Text>
+      <TouchableOpacity 
+        style={styles.input} 
+        onPress={() => setShowDatePicker(true)}
+      >
+        <Text style={styles.pickerText}>
+          {format(selectedDate, 'yyyy-MM-dd')}
+        </Text>
+      </TouchableOpacity>
+      {showDatePicker && (
+        <DateTimePicker
+          value={selectedDate}
+          mode="date"
+          display={Platform.OS === 'android' ? 'calendar' : 'spinner'}
+          onChange={handleDateChange}
+          minimumDate={new Date()}
+        />
+      )}
 
-      <TextInput
-        style={styles.input}
-        placeholder="Время (ЧЧ:ММ)"
-        value={time}
-        onChangeText={setTime}
-      />
+      <Text style={styles.label}>Время:</Text>
+      <TouchableOpacity 
+        style={styles.input} 
+        onPress={() => setShowTimePicker(true)}
+      >
+        <Text style={styles.pickerText}>
+          {format(selectedTime, 'HH:mm')}
+        </Text>
+      </TouchableOpacity>
+      {showTimePicker && (
+        <DateTimePicker
+          value={selectedTime}
+          mode="time"
+          display={Platform.OS === 'android' ? 'clock' : 'spinner'}
+          onChange={handleTimeChange}
+        />
+      )}
 
       <TouchableOpacity style={styles.button} onPress={handleAddAppointment}>
         <Text style={styles.buttonText}>Добавить запись</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.button, styles.cancelButton]} 
+        onPress={() => router.back()}
+      >
+        <Text style={styles.buttonText}>Отмена</Text>
       </TouchableOpacity>
     </View>
   );
@@ -143,6 +203,7 @@ const styles = StyleSheet.create({
     paddingLeft: 15,
     backgroundColor: '#fff',
     fontSize: 16,
+    justifyContent: 'center',
   },
   picker: {
     width: '100%',
@@ -156,12 +217,21 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     marginBottom: 5,
+    color: '#333',
+  },
+  pickerText: {
+    fontSize: 16,
+    color: '#000',
   },
   button: {
     backgroundColor: '#39798F',
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
+    marginBottom: 10,
+  },
+  cancelButton: {
+    backgroundColor: '#e74c3c',
   },
   buttonText: {
     color: '#fff',
