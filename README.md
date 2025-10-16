@@ -1,50 +1,52 @@
-# Welcome to your Expo app 👋
+# 💊 Моя Аптечка — приложение для инвентаризации лекарств
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> Удобное приложение для учёта, хранения и контроля срока годности лекарств дома.
 
-## Get started
+---
 
-1. Install dependencies
+## 🧭 Описание проекта
 
-   ```bash
-   npm install
-   ```
+**Моя Аптечка** — это приложение, которое помогает пользователям:
+- хранить информацию о своих лекарствах,
+- отслеживать сроки годности,
+- получать напоминания о пополнении,
+- быстро находить нужное средство в аптечке.
 
-2. Start the app
+---
 
-   ```bash
-    npx expo start
-   ```
+## ⚙️ Основной функционал
 
-In the output, you'll find options to open the app in a
+- 📦 Добавление лекарств с указанием:
+  - названия, дозировки, формы выпуска, количества;
+  - срока годности и даты приобретения;
+- 🔔 Уведомления о скором истечении срока;
+- 🏷️ Категории лекарств (анальгетики, витамины, антисептики и т.д.);
+- 📸 Возможность прикреплять фото упаковки;
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🖼️ Скриншоты
 
-## Get a fresh project
+| Экран | Описание |
+|-------|-----------|
+| ![Главный экран приложения](app/styles/images/scr1.jpg) Главная страница с перечнем лекарств |
+| ![Добавление лекарства](app/styles/images/scr2.jpg) | Форма добавления нового лекарства |
+| ![Сканер чека](app/styles/images/scr3.jpg) | Сканирование чеков из аптек |
+| ![Аптеки рядом](app/styles/images/scr4.jpg) | В радиусе 1 км.|
+| ![Календарь приема лекарст](app/styles/images/scr5.jpg) | Пользователь вносит название препората, дозу и дату приема|
 
-When you're ready, run:
+---
+
+## 🧩 Технологии
+(пример — обновим после анализа кода)
+- 📱 React Native / Flutter / Android SDK  
+
+---
+
+## 🚀 Установка и запуск
 
 ```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+git clone https://github.com/TankistVova/InProject.git
+cd InProject
+npm install
+npm start
