@@ -54,8 +54,8 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const CATEGORY_COLORS = [
-  '#FFE5E5', '#E5F6FF', '#E5FFE5', '#FFF9E5',
-  '#F5E5FF', '#FFE5F5', '#E5FFFA', '#FFEDE5'
+  '#ECF0F1', '#ECF0F1', '#ECF0F1', '#ECF0F1',
+  '#ECF0F1', '#ECF0F1', '#ECF0F1', '#ECF0F1'
 ];
 
 const getCategoryColor = (category: string, categories: string[]) => {
@@ -480,8 +480,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   selectedCategory: {
-    backgroundColor: '#3498db',
-    shadowColor: '#3498db',
+    backgroundColor: '#367C8B',
+    shadowColor: '#367C8B',
     shadowOpacity: 0.3,
   },
   categoryText: {
